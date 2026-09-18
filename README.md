@@ -7,8 +7,8 @@ This repository contains exercises we will work on together. It is based on a fi
 ## Install
 
 ```sh
-git clone https://github.com/thoughtbot/euruko-2026-workshop.git
-cd euruko-2026-workshop
+git clone https://github.com/thoughtbot/its-about-time-workshop.git
+cd its-about-time-workshop
 bundle install
 bin/doctor
 ```
