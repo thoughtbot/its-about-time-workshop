@@ -1,0 +1,89 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "English"
+require "yaml"
+
+Dir.chdir(File.expand_path("..", __dir__))
+
+WORKFLOW = ".github/workflows/ci.yml"
+
+GREEN = "\e[32m"
+RED = "\e[31m"
+DIM = "\e[2m"
+RESET = "\e[0m"
+
+def checks_in(workflow)
+  jobs = workflow.fetch("jobs").values
+  steps = jobs.flat_map { |job| job.fetch("steps") }
+
+  steps.filter_map do |step|
+    command = step["run"].to_s.strip
+    {command: command, label: step["name"] || command} unless command.empty?
+  end
+end
+
+def matrix_rubies(workflow)
+  jobs = workflow.fetch("jobs").values
+
+  jobs.filter_map { |job| job.dig("strategy", "matrix", "ruby") }.flatten
+end
+
+def run(command, verbose:)
+  output = +""
+
+  IO.popen("#{command} 2>&1") do |io|
+    io.each_line do |line|
+      output << line
+      puts "      #{DIM}#{line.chomp}#{RESET}" if verbose
+    end
+  end
+
+  [$CHILD_STATUS.success?, output]
+end
+
+def report(passed, label, detail)
+  mark = passed ? "#{GREEN}✓#{RESET}" : "#{RED}✗#{RESET}"
+  puts "  #{mark} #{label}  #{DIM}#{detail}#{RESET}"
+end
+
+verbose = ARGV.include?("--verbose") || ARGV.include?("-v")
+workflow = YAML.safe_load_file(WORKFLOW)
+
+failures = {}
+passed = []
+
+checks_in(workflow).each do |check|
+  puts "  #{DIM}· #{check[:command]}#{RESET}" if verbose
+
+  started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  ok, output = run(check[:command], verbose: verbose)
+  elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
+
+  failures[check[:command]] = output unless ok
+  passed << ok
+  report(ok, check[:label], format("%.1fs", elapsed))
+end
+
+failures.each do |command, output|
+  puts
+  puts "#{RED}#{command}#{RESET}"
+  puts
+  puts output.lines.map { |line| "  #{line}" }.join
+end
+
+puts
+
+if failures.empty?
+  rubies = matrix_rubies(workflow)
+  puts "  #{GREEN}All good.#{RESET}"
+  puts "  #{DIM}CI also runs bin/doctor on Ruby #{rubies.join(", ")}. " \
+       "This was #{RUBY_VERSION}.#{RESET}"
+  puts
+  exit 0
+end
+
+puts "  #{RED}#{failures.length} of #{passed.length} failing.#{RESET} " \
+     "CI would not be green."
+puts
+exit 1

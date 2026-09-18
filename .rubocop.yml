@@ -1,0 +1,34 @@
+# Standard's ruleset, run through the RuboCop CLI so that `rake rubocop`, CI and
+# editor integrations all keep working unchanged.
+#
+# There are no style settings below, on purpose. Standard already turns off
+# Metrics, Style/Documentation, FrozenStringLiteralComment, BlockDelimiters,
+# MultilineBlockChain, ArgumentsForwarding, Naming/BlockForwarding and
+# Lint/UnusedMethodArgument, enforces double quotes, aligns arguments with a
+# fixed indent, and imposes no line-length limit. That was every deviation this
+# file used to spell out by hand, so it spells out none of them now.
+#
+# `standard` has to be required; the other three are RuboCop plugins and warn if
+# you require them instead. Standard's README calls CLI use unsupported, so if a
+# release ever breaks this wiring, the `standardrb` binary is the fallback.
+require:
+  - standard
+
+plugins:
+  - standard-custom
+  - standard-performance
+  - rubocop-performance
+
+# `config/ruby-3.2.yml` rather than `config/base.yml`: it chains to base, drops
+# the two cops that assume newer syntax, and sets TargetRubyVersion to the floor
+# this repository promises. It is what Standard's own runner would load here.
+inherit_gem:
+  standard: config/ruby-3.2.yml
+  standard-custom: config/base.yml
+  standard-performance: config/base.yml
+
+AllCops:
+  # CI installs the bundle into vendor/, and plenty of gems ship their own Ruby.
+  Exclude:
+    - "vendor/**/*"
+  SuggestExtensions: false

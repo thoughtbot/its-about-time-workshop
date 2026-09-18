@@ -1,0 +1,24 @@
+--require spec_helper
+-I spec
+--color
+--format documentation
+
+# The specs live next to the code they are about, in exercises/*/spec rather
+# than in one top-level spec/ directory. Without this a bare
+# `bundle exec rspec` looks only in ./spec, finds nothing, and cheerfully
+# reports success. `rake e1` and an explicit path still scope to what you asked
+# for.
+--default-path .
+
+# ...which means the glob starts at the repository root, so it has to be told
+# to stay out of anywhere gems get unpacked. CI installs the bundle into
+# vendor/, and plenty of gems ship their own specs.
+--exclude-pattern vendor/**/*_spec.rb,.ruby-lsp/**/*_spec.rb
+
+# In file order, not random.
+#
+# The exercise READMEs describe a progression through the failures, and a room
+# of people comparing failure lists needs them in the same order. This lives
+# here rather than in spec_helper.rb because an attendee with `--order random`
+# in their own ~/.rspec would otherwise override it.
+--order defined

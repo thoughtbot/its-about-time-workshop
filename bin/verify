@@ -1,0 +1,123 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "bundler"
+require "fileutils"
+
+SOLVABLE = [
+  {
+    task: "e0",
+    exercise: "exercises/00_warmup/lib/time_formatter.rb",
+    solution: "solutions/00_warmup.rb"
+  },
+  {
+    task: "e1",
+    exercise: "exercises/01_parsing/lib/booking.rb",
+    solution: "solutions/01_parsing.rb"
+  },
+  {
+    task: "e2",
+    exercise: "exercises/02_durations/lib/subscription.rb",
+    solution: "solutions/02_durations.rb"
+  },
+  {
+    task: "e3",
+    exercise: "exercises/03_ambiguity/lib/session_planner.rb",
+    solution: "solutions/03_ambiguity.rb"
+  },
+  {
+    task: "e4",
+    exercise: "exercises/04_boundaries/lib/observing_night.rb",
+    solution: "solutions/04_boundaries.rb"
+  }
+].freeze
+
+EXPECTED_FAILURES = {
+  "e0" => 1,
+  "e1" => 5,
+  "e2" => 6,
+  "e3" => 3,
+  "e4" => 7,
+  "e5" => 5
+}.freeze
+
+SOLVED_GEMFILE = File.expand_path("../gemfiles/solved.gemfile", __dir__)
+
+def unbundled(gemfile: nil)
+  Bundler.with_unbundled_env do
+    ENV["BUNDLE_GEMFILE"] = gemfile if gemfile
+    yield
+  end
+end
+
+def failures_for(task, gemfile: nil)
+  output = unbundled(gemfile: gemfile) { `bundle exec rake #{task} 2>&1` }
+  output[/(\d+) failures?/, 1].to_i +
+    output[/(\d+) errors? occurred outside of examples/, 1].to_i
+end
+
+def report(passed, label)
+  puts "  #{passed ? "\e[32m✓\e[0m" : "\e[31m✗\e[0m"} #{label}"
+  passed
+end
+
+def verify_broken
+  puts "Exercises should start broken.\n\n"
+  EXPECTED_FAILURES.map do |task, expected|
+    actual = failures_for(task)
+    report(
+      actual == expected,
+      "#{task}: #{actual} failing (expected #{expected})"
+    )
+  end
+end
+
+def verify_solutions
+  puts "Solutions should pass.\n\n"
+  originals = SOLVABLE.to_h { |f| [f[:exercise], File.read(f[:exercise])] }
+  results = []
+
+  %w[INT TERM PIPE].each { |signal| Signal.trap(signal) { raise Interrupt } }
+
+  begin
+    SOLVABLE.each { |f| FileUtils.cp(f[:solution], f[:exercise]) }
+
+    results = SOLVABLE.map { |f| f[:task] }.uniq.map do |task|
+      report(failures_for(task).zero?, "#{task}: green with its solution")
+    end
+  ensure
+    originals.each { |path, body| File.write(path, body) }
+  end
+
+  results + verify_updated_database
+end
+
+def verify_updated_database
+  installed = unbundled(gemfile: SOLVED_GEMFILE) do
+    system("bundle", "check", out: File::NULL, err: File::NULL) ||
+      system("bundle", "install", "--quiet")
+  end
+
+  unless installed
+    return [report(false, "e5: could not install #{SOLVED_GEMFILE}")]
+  end
+
+  [report(
+    failures_for("e5", gemfile: SOLVED_GEMFILE).zero?,
+    "e5: green with a current time zone database"
+  )]
+end
+
+mode = ARGV.first
+abort "usage: bin/verify --broken|--solutions" unless ["--broken", "--solutions"].include?(mode)
+
+puts
+results = (mode == "--broken") ? verify_broken : verify_solutions
+
+puts
+if results.all?
+  puts "  \e[32mAll good.\e[0m\n\n"
+else
+  puts "  \e[31m#{results.count(false)} problem(s).\e[0m\n\n"
+  exit 1
+end

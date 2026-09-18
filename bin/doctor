@@ -1,0 +1,71 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+ENV["TZ"] = "Pacific/Kiritimati"
+
+problems = []
+
+def check(label)
+  result = yield
+  puts "  \e[32m✓\e[0m #{label}#{" — #{result}" if result.is_a?(String)}"
+  true
+rescue StandardError, LoadError => e
+  puts "  \e[31m✗\e[0m #{label}"
+  puts "      #{e.class}: #{e.message}"
+  false
+end
+
+puts
+puts "Workshop setup check"
+puts
+
+problems << "ruby" unless check("Ruby #{RUBY_VERSION}") do
+  if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.2")
+    raise "Ruby 3.2 or newer is required. You have #{RUBY_VERSION}."
+  end
+
+  "ok"
+end
+
+problems << "bundler" unless check("Gems installed") do
+  require "bundler/setup"
+  "ok"
+end
+
+problems << "activesupport" unless check("ActiveSupport loads") do
+  require "active_support"
+  require "active_support/time"
+  ActiveSupport::VERSION::STRING
+end
+
+problems << "tzinfo-data" unless check("Time zone database") do
+  require "tzinfo/data"
+  "#{TZInfo::Data::Version::STRING} (tzdata #{TZInfo::Data::Version::TZDATA})"
+end
+
+problems << "zones" unless check("Zone rules resolve correctly") do
+  offset = Time.find_zone!("Asia/Kathmandu").utc_offset
+  raise "Asia/Kathmandu resolved to #{offset}s, expected 20700s" unless offset == 20_700
+
+  "Asia/Kathmandu is +05:45"
+end
+
+problems << "tz" unless check("Process time zone is overridable") do
+  unless Time.now.utc_offset == 50_400
+    raise "TZ override had no effect (got #{Time.now.utc_offset}s)"
+  end
+
+  "TZ=Pacific/Kiritimati gives UTC+14"
+end
+
+puts
+if problems.empty?
+  puts "  \e[32mAll good!\e[0m"
+  puts
+  exit 0
+else
+  puts "  \e[31mNot ready yet: #{problems.join(", ")}\e[0m"
+  puts "  Try `bundle install` first. Still stuck? Ask us :)"
+  puts
+  exit 1
+end
